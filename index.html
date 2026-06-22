@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ARAf-wereldkaart (gedeeld)</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+:root{
+ --clin:#c0392b; --env:#1e8449; --both:#8e44ad; --vet:#d68910; --new:#2471a3;
+ --bg:#f4f6f8; --panel:#fff; --ink:#1c2833; --muted:#5d6d7e; --line:#dfe3e8;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+#app{display:flex;height:100vh;overflow:hidden}
+#map{flex:1;height:100%}
+#side{width:430px;max-width:46vw;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;height:100%}
+header.top{padding:14px 16px;border-bottom:1px solid var(--line)}
+header.top h1{margin:0;font-size:16px;line-height:1.3}
+header.top p{margin:4px 0 0;font-size:12px;color:var(--muted)}
+.toolbar{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.toolbar input[type=text]{flex:1;min-width:120px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-size:13px}
+.btn{padding:7px 11px;border:1px solid var(--line);background:#fff;border-radius:6px;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:#f0f3f6}
+.btn.primary{background:var(--new);color:#fff;border-color:var(--new)}
+.btn.primary:hover{filter:brightness(1.07)}
+.legend{padding:8px 16px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.dot{width:12px;height:12px;border-radius:50%;display:inline-block;border:1.5px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.25)}
+.filters{padding:8px 16px;border-bottom:1px solid var(--line);font-size:12px;display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:4px 9px;border:1px solid var(--line);border-radius:14px;cursor:pointer;user-select:none}
+.chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+#content{flex:1;overflow:auto;padding:14px 16px}
+.placeholder{color:var(--muted);font-size:13px;line-height:1.6}
+.banner{margin:10px 16px;padding:10px 12px;border-radius:8px;font-size:12.5px;line-height:1.5}
+.banner.err{background:#fdecea;color:#922b21;border:1px solid #f5b7b1}
+.banner.ok{background:#eafaf1;color:#1e6f43;border:1px solid #abebc6}
+.study-h{font-size:15px;margin:0 0 2px}
+.study-sub{font-size:12px;color:var(--muted);margin:0 0 10px}
+.meta-grid{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:12.5px;margin-bottom:12px}
+.meta-grid b{color:var(--muted);font-weight:600}
+.tag{display:inline-block;font-size:11px;padding:2px 7px;border-radius:10px;color:#fff;margin:0 4px 4px 0}
+.iso-card{border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:9px}
+.iso-card .idline{font-weight:600;font-size:12.5px;margin-bottom:4px}
+.mics{display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px;margin-top:5px;color:var(--muted)}
+.mics b{color:var(--ink)}
+.count-badge{font-size:12px;color:var(--muted)}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:9999}
+.overlay.show{display:flex}
+.modal{background:#fff;width:560px;max-width:94vw;max-height:90vh;overflow:auto;border-radius:10px;padding:18px 20px}
+.modal h2{margin:0 0 12px;font-size:16px}
+.form-row{margin-bottom:9px}
+.form-row label{display:block;font-size:12px;color:var(--muted);margin-bottom:3px}
+.form-row input,.form-row select{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-size:13px;font-family:inherit}
+.form-two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.hint{font-size:11px;color:var(--muted);margin-top:2px}
+.new-badge{background:var(--new);color:#fff;font-size:10px;padding:1px 6px;border-radius:8px;margin-left:6px}
+.leaflet-popup-content{font-size:12.5px;line-height:1.4}
+@media(max-width:760px){#app{flex-direction:column}#side{width:100%;max-width:100%;height:48%}#map{height:52%}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="map"></div>
+  <aside id="side">
+    <header class="top">
+      <h1>Azoolresistente <i>A. fumigatus</i> — gedeelde surveillancekaart</h1>
+      <p id="subcount">Laden…</p>
+    </header>
+    <div class="toolbar">
+      <input id="search" type="text" placeholder="Zoek op auteur, land, mechanisme…"/>
+      <button class="btn primary" id="addBtn">+ Nieuwe vondst</button>
+      <button class="btn" id="exportBtn">Export CSV</button>
+      <button class="btn" id="reloadBtn">↻ Ververs</button>
+    </div>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--clin)"></i>Klinisch</span>
+      <span><i class="dot" style="background:var(--env)"></i>Omgeving</span>
+      <span><i class="dot" style="background:var(--both)"></i>Beide</span>
+      <span><i class="dot" style="background:var(--vet)"></i>Veterinair</span>
+      <span><i class="dot" style="background:var(--new)"></i>Toegevoegd</span>
+    </div>
+    <div class="filters" id="filters">
+      <span class="chip on" data-f="all">Alle</span>
+      <span class="chip" data-f="Klinisch">Klinisch</span>
+      <span class="chip" data-f="Omgeving">Omgeving</span>
+      <span class="chip" data-f="Klinisch + Omgeving">Beide</span>
+      <span class="chip" data-f="Veterinair">Veterinair</span>
+      <span class="chip" data-f="new">Toegevoegd</span>
+    </div>
+    <div id="content">
+      <p class="placeholder">Klik op een stip om de volledige extractietabel-gegevens van die studie te zien.<br><br>Gebruik <b>+ Nieuwe vondst</b> om een ARAf-rapportage toe te voegen aan de <b>gedeelde database</b> — iedereen die de kaart opent ziet die direct.</p>
+    </div>
+  </aside>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2>Nieuwe ARAf-vondst toevoegen</h2>
+    <div class="form-two">
+      <div class="form-row"><label>Auteur &amp; jaar *</label><input id="f_study" placeholder="bv. Jansen et al., 2026"/></div>
+      <div class="form-row"><label>Land / regio *</label><input id="f_land" placeholder="bv. Nederland (Utrecht)"/></div>
+    </div>
+    <div class="form-two">
+      <div class="form-row"><label>Latitude *</label><input id="f_lat" type="number" step="0.0001" placeholder="52.09"/><div class="hint">Tip: klik op de kaart om coördinaten in te vullen</div></div>
+      <div class="form-row"><label>Longitude *</label><input id="f_lon" type="number" step="0.0001" placeholder="5.12"/></div>
+    </div>
+    <div class="form-two">
+      <div class="form-row"><label>Setting</label><select id="f_type">
+        <option>Klinisch</option><option>Omgeving</option><option>Klinisch + Omgeving</option><option>Veterinair</option></select></div>
+      <div class="form-row"><label>Isolaat-ID</label><input id="f_id" placeholder="bv. NL-2026-01"/></div>
+    </div>
+    <div class="form-two">
+      <div class="form-row"><label>Resistentiemechanisme (CYP51A)</label><input id="f_mech" placeholder="bv. TR34/L98H"/></div>
+      <div class="form-row"><label>Antifungaal middel</label><input id="f_drug" placeholder="bv. Itraconazol, Voriconazol"/></div>
+    </div>
+    <div class="form-two">
+      <div class="form-row"><label>N resistente isolaten</label><input id="f_nres" placeholder="bv. 3"/></div>
+      <div class="form-row"><label>Totaal getest</label><input id="f_ntest" placeholder="bv. 120"/></div>
+    </div>
+    <div class="form-two">
+      <div class="form-row"><label>MIC Itraconazol (ECV=1)</label><input id="f_itz" placeholder="bv. >8"/></div>
+      <div class="form-row"><label>MIC Voriconazol (ECV=1)</label><input id="f_vcz" placeholder="bv. 4"/></div>
+    </div>
+    <div class="form-two">
+      <div class="form-row"><label>MIC Posaconazol (ECV=0.5)</label><input id="f_pcz" placeholder="bv. 0.5"/></div>
+      <div class="form-row"><label>MIC Isavuconazol (ECV=1)</label><input id="f_isa" placeholder="bv. 2"/></div>
+    </div>
+    <div class="form-two">
+      <div class="form-row"><label>Paginanummer / bron</label><input id="f_pag" placeholder="bv. p. 5 (Tabel 2)"/></div>
+      <div class="form-row"><label>Studiedesign</label><input id="f_design" placeholder="bv. Prospectieve surveillance"/></div>
+    </div>
+    <div class="form-row"><label>Toegevoegd door (optioneel)</label><input id="f_by" placeholder="initialen of naam"/></div>
+    <div class="actions">
+      <button class="btn" id="cancelBtn">Annuleren</button>
+      <button class="btn primary" id="saveBtn">Opslaan in gedeelde database</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============ Supabase init ============ */
+const CFG = window.ARAF_CONFIG || {};
+let sb = null, CONFIG_OK = false;
+if(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY &&
+   !/JOUW-/.test(CFG.SUPABASE_URL) && !/JOUW-/.test(CFG.SUPABASE_ANON_KEY)){
+  sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+  CONFIG_OK = true;
+}
+
+const COLORS={"Klinisch":"#c0392b","Omgeving":"#1e8449","Klinisch + Omgeving":"#8e44ad","Veterinair":"#d68910"};
+const NEWCOLOR="#2471a3";
+let STUDIES=[];           // alle rijen uit database
+let CURRENT_FILTER="all", SEARCH="";
+
+/* ============ MAP ============ */
+const map=L.map('map',{worldCopyJump:true}).setView([28,12],2);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  {attribution:'&copy; OpenStreetMap &copy; CARTO',subdomains:'abcd',maxZoom:19}).addTo(map);
+let markersLayer=L.layerGroup().addTo(map);
+
+function isUser(s){ return s.source==='gebruiker'; }
+function colorFor(s){ return isUser(s)?NEWCOLOR:(COLORS[s.setting]||"#566573"); }
+function nIso(s){ return (s.isolates&&s.isolates.length)||s.n_isolates||1; }
+function radiusFor(s){ return Math.max(6,Math.min(16,5+Math.sqrt(nIso(s))*2)); }
+
+function matches(s){
+  if(CURRENT_FILTER==="new" && !isUser(s)) return false;
+  if(CURRENT_FILTER!=="all" && CURRENT_FILTER!=="new" && s.setting!==CURRENT_FILTER) return false;
+  if(SEARCH){
+    const hay=(s.study+" "+(s.land||"")+" "+(s.label||"")+" "+((s.mechs||[]).join(" "))+" "+
+      ((s.isolates||[]).map(i=>i.mech||"").join(" "))).toLowerCase();
+    if(!hay.includes(SEARCH)) return false;
+  }
+  return true;
+}
+
+function jittered(){
+  const seen={};
+  return STUDIES.map(s=>{
+    const key=Number(s.lat).toFixed(2)+","+Number(s.lon).toFixed(2);
+    const k=(seen[key]=(seen[key]||0)); seen[key]++;
+    let lat=Number(s.lat),lon=Number(s.lon);
+    if(k>0){const ang=k*2.399,r=0.45*Math.ceil(k/6);lat+=r*Math.sin(ang);lon+=r*Math.cos(ang);}
+    return {...s,_lat:lat,_lon:lon};
+  });
+}
+
+function render(){
+  markersLayer.clearLayers();
+  const list=jittered().filter(matches);
+  list.forEach(s=>{
+    const m=L.circleMarker([s._lat,s._lon],{radius:radiusFor(s),color:"#fff",weight:1.5,
+      fillColor:colorFor(s),fillOpacity:.88});
+    m.bindTooltip(`<b>${s.study}</b><br>${s.label||s.land||""}<br>${nIso(s)} isolaat-regel(s)`,{direction:"top"});
+    m.on('click',()=>showStudy(s));
+    markersLayer.addLayer(m);
+  });
+  const nUser=STUDIES.filter(isUser).length;
+  document.getElementById('subcount').textContent=
+    `${STUDIES.length} studies · ${STUDIES.length-nUser} literatuur`+
+    (nUser?` · ${nUser} toegevoegd`:``)+` · ${list.length} zichtbaar`;
+}
+
+function esc(t){return (t==null?"":String(t)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+
+function showStudy(s){
+  const c=document.getElementById('content');
+  const tag=`<span class="tag" style="background:${colorFor(s)}">${esc(s.setting)}</span>`;
+  const isos=s.isolates||[];
+  const cards=isos.map(i=>`
+    <div class="iso-card">
+      <div class="idline">${esc(i.id||"(geen ID)")} ${i.mech?`· ${esc(i.mech)}`:""}</div>
+      <div style="font-size:11.5px;color:var(--muted)">${i.type?esc(i.type)+" · ":""}${i.land?esc(i.land):""}</div>
+      <div style="font-size:11.5px;margin-top:3px"><b>N resistent:</b> ${esc(i.nres||"—")} &nbsp; <b>Totaal getest:</b> ${esc(i.ntest||"—")}</div>
+      ${i.drug?`<div style="font-size:11.5px;margin-top:2px"><b>Middel:</b> ${esc(i.drug)}</div>`:""}
+      <div class="mics"><span>ITZ <b>${esc(i.itz||"—")}</b></span><span>VCZ <b>${esc(i.vcz||"—")}</b></span><span>PCZ <b>${esc(i.pcz||"—")}</b></span><span>ISA <b>${esc(i.isa||"—")}</b></span></div>
+      ${i.pag?`<div style="font-size:11px;color:var(--muted);margin-top:4px">${esc(i.pag)}</div>`:""}
+    </div>`).join("");
+  c.innerHTML=`
+    <h3 class="study-h">${esc(s.study)} ${isUser(s)?'<span class="new-badge">TOEGEVOEGD</span>':''}</h3>
+    <p class="study-sub">${esc(s.label||s.land||"")}</p>${tag}
+    <div class="meta-grid" style="margin-top:8px">
+      <b>Land/regio</b><span>${esc(s.land)}</span>
+      <b>Setting</b><span>${esc(s.setting)}</span>
+      <b>Mechanismen</b><span>${(s.mechs&&s.mechs.length)?esc(s.mechs.join(", ")):"zie isolaten"}</span>
+      <b>Isolaat-regels</b><span>${isos.length}</span>
+      <b>Studiedesign</b><span>${esc(s.design||"—")}</span>
+      ${s.added_by?`<b>Ingevoerd door</b><span>${esc(s.added_by)}</span>`:""}
+    </div>
+    <div class="count-badge" style="margin-bottom:6px">Geëxtraheerde isolaten / regels:</div>
+    ${cards||'<p class="placeholder">Geen isolaatdetails.</p>'}
+    ${isUser(s)?`<button class="btn" style="margin-top:8px" onclick="deleteRow(${s.id})">Verwijder deze toevoeging</button>`:""}`;
+  map.setView([Number(s.lat),Number(s.lon)],Math.max(map.getZoom(),4),{animate:true});
+}
+
+/* ============ DATA: laden uit Supabase ============ */
+async function loadData(){
+  if(!CONFIG_OK){
+    document.getElementById('content').innerHTML=
+      '<div class="banner err"><b>Nog niet geconfigureerd.</b><br>Open <code>config.js</code> en vul je Supabase Project URL en anon-sleutel in. Zie README.md voor de stappen.</div>';
+    document.getElementById('subcount').textContent='Geen databaseverbinding';
+    return;
+  }
+  const {data,error}=await sb.from('araf_studies').select('*').order('id',{ascending:true});
+  if(error){
+    document.getElementById('content').innerHTML=
+      '<div class="banner err"><b>Kon data niet laden.</b><br>'+esc(error.message)+
+      '<br>Controleer of schema.sql + seed.sql zijn uitgevoerd en of de keys kloppen.</div>';
+    return;
+  }
+  STUDIES=data||[];
+  render();
+}
+
+window.deleteRow=async function(id){
+  if(!confirm("Deze toevoeging uit de gedeelde database verwijderen?"))return;
+  const {error}=await sb.from('araf_studies').delete().eq('id',id);
+  if(error){alert("Verwijderen mislukt: "+error.message);return;}
+  await loadData();
+  document.getElementById('content').innerHTML='<p class="placeholder">Toevoeging verwijderd.</p>';
+};
+
+/* ============ FILTERS / SEARCH ============ */
+document.getElementById('filters').addEventListener('click',e=>{
+  if(!e.target.classList.contains('chip'))return;
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));
+  e.target.classList.add('on');CURRENT_FILTER=e.target.dataset.f;render();
+});
+document.getElementById('search').addEventListener('input',e=>{SEARCH=e.target.value.trim().toLowerCase();render();});
+document.getElementById('reloadBtn').onclick=loadData;
+
+/* ============ ADD FINDING ============ */
+const overlay=document.getElementById('overlay');
+document.getElementById('addBtn').onclick=()=>{
+  if(!CONFIG_OK){alert("Stel eerst config.js in (zie README.md).");return;}
+  overlay.classList.add('show');
+};
+document.getElementById('cancelBtn').onclick=()=>overlay.classList.remove('show');
+overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.classList.remove('show');});
+map.on('click',e=>{
+  if(overlay.classList.contains('show')){
+    document.getElementById('f_lat').value=e.latlng.lat.toFixed(4);
+    document.getElementById('f_lon').value=e.latlng.lng.toFixed(4);
+  }
+});
+
+document.getElementById('saveBtn').onclick=async()=>{
+  const g=id=>document.getElementById(id).value.trim();
+  const study=g('f_study'),land=g('f_land'),lat=parseFloat(g('f_lat')),lon=parseFloat(g('f_lon'));
+  if(!study||!land||isNaN(lat)||isNaN(lon)){alert("Vul minimaal auteur+jaar, land, latitude en longitude in.");return;}
+  const setting=g('f_type'),mraw=g('f_mech'),mechs=[];
+  if(/TR34/i.test(mraw))mechs.push("TR34/L98H"); if(/TR46/i.test(mraw))mechs.push("TR46/Y121F/T289A");
+  const row={study,land,lat,lon,label:land,design:g('f_design'),setting,mechs,source:'gebruiker',
+    added_by:g('f_by')||null,
+    isolates:[{id:g('f_id'),land,nres:g('f_nres'),ntest:g('f_ntest'),mech:mraw,drug:g('f_drug'),
+      type:setting,itz:g('f_itz'),vcz:g('f_vcz'),pcz:g('f_pcz'),isa:g('f_isa'),pag:g('f_pag')}]};
+  const btn=document.getElementById('saveBtn'); btn.disabled=true; btn.textContent="Opslaan…";
+  const {data,error}=await sb.from('araf_studies').insert(row).select().single();
+  btn.disabled=false; btn.textContent="Opslaan in gedeelde database";
+  if(error){alert("Opslaan mislukt: "+error.message);return;}
+  overlay.classList.remove('show');
+  document.querySelectorAll('.modal input').forEach(i=>i.value="");
+  await loadData();
+  const fresh=STUDIES.find(x=>x.id===data.id); if(fresh)showStudy(fresh);
+};
+
+/* ============ CSV EXPORT (volledige database) ============ */
+document.getElementById('exportBtn').onclick=()=>{
+  if(!STUDIES.length){alert("Geen data om te exporteren.");return;}
+  const head=["Isolaat ID","Auteur & jaar","Land/regio","N resistente isolaten","Totaal getest",
+    "Resistentiemechanisme(CYP51A)","Antifungaal middel","Klinisch / Omgeving",
+    "MIC Itraconazol","MIC Voriconazol","MIC Posaconazol","MIC Isavuconazol",
+    "Paginanummer","Studiedesign","Bron","Latitude","Longitude","Toegevoegd door"];
+  const q=v=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"';
+  const lines=[head.map(q).join(",")];
+  STUDIES.forEach(u=>(u.isolates||[]).forEach(i=>{
+    lines.push([i.id,u.study,u.land,i.nres,i.ntest,i.mech,i.drug,i.type,i.itz,i.vcz,i.pcz,i.isa,i.pag,u.design,u.source,u.lat,u.lon,u.added_by].map(q).join(","));
+  }));
+  const blob=new Blob(["﻿"+lines.join("\n")],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download="ARAf_database_export.csv";a.click();
+};
+
+loadData();
+</script>
+</body>
+</html>
